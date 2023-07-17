@@ -1,6 +1,6 @@
 {
   "name": "swagger-maker",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "A simple tool to generate OpenAPI 3.1.0 using annotations",
   "main": "index.js",
   "scripts": {

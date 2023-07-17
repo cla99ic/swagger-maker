@@ -53,12 +53,16 @@ const convert = str => {
 }
 
 const listFiles = folderPath => {
-    return fs.readdirSync(folderPath).reduce((allFiles, file) => {
-        const filePath = path.join(folderPath, file)
-        return allFiles.concat(
-            fs.statSync(filePath).isDirectory() ? listFiles(filePath) : filePath
-        )
-    }, [])
+    try {
+        return fs.readdirSync(folderPath).reduce((allFiles, file) => {
+            const filePath = path.join(folderPath, file)
+            return allFiles.concat(
+                fs.statSync(filePath).isDirectory() ? listFiles(filePath) : filePath
+            )
+        }, [])
+    } catch (e) {
+        return []
+    }
 }
 
 const scan = async () => {
@@ -164,15 +168,23 @@ const scan = async () => {
                 model = (await import('file://' + schemaFile)).default
             }
             const swaggerSchema = m2s(model)
+            try {
+                const obj = model.schema.methods.toJSON.toString().split('delete').map(a => a.split(';')[0].split('.')[1])
+                obj.shift()
+                for (let key of obj) {
+                    delete swaggerSchema.properties[key]
+                }
+            } catch (e) { }
             const swaggerFilePath = path.join(tempDirectory, 'component', schemaFile.replace(schemaDirectoryPath, '').replace(/\.[^.\\]+$/, '.yaml'))
+            const originalFilePath = path.join(outputDirectory, 'component', schemaFile.replace(schemaDirectoryPath, '').replace(/\.[^.\\]+$/, '.yaml'))
 
             if (!fs.existsSync(path.dirname(swaggerFilePath)))
                 fs.mkdirSync(path.dirname(swaggerFilePath), { recursive: true })
 
             let yamlData = {}
 
-            if (fs.existsSync(swaggerFilePath)) {
-                yamlData = yaml.load(fs.readFileSync(swaggerFilePath).toString())
+            if (fs.existsSync(originalFilePath)) {
+                yamlData = yaml.load(fs.readFileSync(originalFilePath).toString())
             }
 
             yamlData[swaggerSchema.title + '-default'] = swaggerSchema
@@ -183,6 +195,7 @@ const scan = async () => {
             const errorMessage = e.message
         }
     }
+
 
     for (let schemaFile of listFiles(path.join(process.cwd(), 'swagger', 'component'))) {
         const yamlData = yaml.load(fs.readFileSync(schemaFile).toString())
@@ -346,17 +359,17 @@ const scan = async () => {
                 mainObject.paths[endpoint] = { $ref: `./router${ref}#/paths/` + editedEndpoint }
             }
             if (endpoint in singleFileObject.paths) {
-                singleFileObject.paths[endpoint][method] = api
+                singleFileObject.paths[endpoint][method] = JSON.parse(JSON.stringify(api))
             } else {
-                singleFileObject.paths[endpoint] = { [method]: api }
+                singleFileObject.paths[endpoint] = { [method]: JSON.parse(JSON.stringify(api)) }
             }
             try {
-                let bodyRef = singleFileObject.paths[endpoint][method].requestBody.content['application/json'].schema.$ref
+                let bodyRef = JSON.parse(JSON.stringify(singleFileObject.paths[endpoint][method].requestBody.content['application/json'].schema.$ref))
                 if (bodyRef) bodyRef = '#/components/schemas/' + bodyRef.split('/')[bodyRef.split('/').length - 1]
                 singleFileObject.paths[endpoint][method].requestBody.content['application/json'].schema.$ref = bodyRef
             } catch (e) { }
             try {
-                let responseRef = singleFileObject.paths[endpoint][method].responses.content['application/json'].schema.$ref
+                let responseRef = JSON.parse(JSON.stringify(singleFileObject.paths[endpoint][method].responses.content['application/json'].schema.$ref))
                 if (responseRef) responseRef = '#/components/schemas/' + responseRef.split('/')[responseRef.split('/').length - 1]
                 singleFileObject.paths[endpoint][method].responses.content['application/json'].schema.$ref = responseRef
             } catch (e) { }
